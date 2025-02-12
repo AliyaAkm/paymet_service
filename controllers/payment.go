@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"os"
 	"time"
+	"io"
+    "log"
 
 	"github.com/jung-kurt/gofpdf"
 )
@@ -93,6 +95,9 @@ func generateFiscalReceiptPDF(companyName string, transactionNumber uint, orderD
 func PaySubscription(w http.ResponseWriter, r *http.Request) {
 	// Для формирования JSON-ответов устанавливаем Content-Type.
 	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 
 	var payment Payment
 	if err := json.NewDecoder(r.Body).Decode(&payment); err != nil {
@@ -182,7 +187,7 @@ func PaySubscription(w http.ResponseWriter, r *http.Request) {
 	// URL сервиса для отправки email можно задать через переменную окружения EMAIL_SERVICE_URL.
 	emailServiceURL := os.Getenv("EMAIL_SERVICE_URL")
 	if emailServiceURL == "" {
-		emailServiceURL = "http://localhost:8080/send-email"
+		emailServiceURL = "http://localhost:8080/email"
 	}
 
 	// Подготовка JSON-данных для email.
@@ -241,11 +246,31 @@ func PaySubscription(w http.ResponseWriter, r *http.Request) {
 
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Do(req)
-	if err != nil || resp.StatusCode != http.StatusOK {
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(Response{Status: "fail", Message: "Error sending email receipt"})
-		return
-	}
+    if err != nil {
+        // Handle error making the request
+        log.Printf("Error making request: %v", err)
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(Response{Status: "fail", Message: "Error sending email receipt"})
+        return
+    }
+    defer resp.Body.Close() // Ensure the body is closed when done
+
+    if resp.StatusCode != http.StatusOK {
+        // Read the response body
+        bodyBytes, err := io.ReadAll(resp.Body) // Use io.ReadAll (or ioutil.ReadAll in older Go versions)
+        if err != nil {
+            log.Printf("Error reading response body: %v", err)
+        } else {
+            fmt.Println("Response Body:", string(bodyBytes))
+        }
+
+        w.WriteHeader(http.StatusInternalServerError)
+        json.NewEncoder(w).Encode(Response{Status: "fail", Message: "Error sending email receipt"})
+        return
+    }
+
+    // Process the successful response here
+
 	defer resp.Body.Close()
 
 	// Обновляем статус транзакции до "completed".

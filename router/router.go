@@ -7,8 +7,11 @@ import (
 	"net/http"
 )
 
-func NewRouter() *mux.Router {
+func NewRouter() http.Handler {
 	router := mux.NewRouter()
+
+	router.Use(middleware.CORSMiddleware)
+	router.Use(middleware.RateLimit)
 
 	authRoutes := router.PathPrefix("/").Subrouter()
 	authRoutes.Use(middleware.MiddlewareAuth)
@@ -19,16 +22,15 @@ func NewRouter() *mux.Router {
 	//adminRoutes.Use(middleware.MiddlewareAuth)
 	//adminRoutes.Use(middleware.MiddlewareRole("admin"))
 	adminRoutes.HandleFunc("/subscription", controllers.CreateSubscription).Methods("POST")
-	adminRoutes.HandleFunc("/subscription/{id}", controllers.GetSubscription).Methods("GET")
-	adminRoutes.HandleFunc("/subscription", controllers.GetAllSubscriptions).Methods("GET")
+	router.HandleFunc("/subscription/{id}", controllers.GetSubscription).Methods("GET")
+	router.HandleFunc("/subscription", controllers.GetAllSubscriptions).Methods("GET")
 	adminRoutes.HandleFunc("/subscription/{id}", controllers.DeleteSubscription).Methods("DELETE")
 	adminRoutes.HandleFunc("/subscription/{id}", controllers.UpdateSubscription).Methods("PUT")
 
 	router.HandleFunc("/payment", controllers.PaySubscription).Methods("POST")
 	//middleware only here!
-	router.Use(middleware.RateLimit)
 
-	return router
+	return middleware.CORSMiddleware(router)
 }
 func serveHTML(filePath string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
